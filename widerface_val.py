@@ -49,28 +49,29 @@ def detect_face(image, shrink):
     height = x.shape[0]
     x = x.astype(np.float32)
     x -= np.array([104, 117, 123],dtype=np.float32)
+    with torch.no_grad():
+        x = torch.from_numpy(x).permute(2, 0, 1)
+        x = x.unsqueeze(0)
+        x = Variable(x.cuda())
 
-    x = torch.from_numpy(x).permute(2, 0, 1)
-    x = x.unsqueeze(0)
-    x = Variable(x.cuda(), volatile=True)
+        #net.priorbox = PriorBoxLayer(width,height)
+        y = net(x)
+        detections = y.data
+        scale = torch.Tensor([width, height, width, height])
 
-    #net.priorbox = PriorBoxLayer(width,height)
-    y = net(x)
-    detections = y.data
-    scale = torch.Tensor([width, height, width, height])
-
-    boxes=[]
-    scores = []
-    for i in range(detections.size(1)):
-        j = 0
-        while detections[0,i,j,0] >= 0.01:
-            score = detections[0,i,j,0]
-            pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
-            boxes.append([pt[0],pt[1],pt[2],pt[3]])
-            scores.append(score)
-            j += 1
-            if j >= detections.size(2):
-                break
+        boxes=[]
+        scores = []
+        for i in range(detections.size(1)):
+            j = 0
+            while detections[0,i,j,0] >= 0.01:
+                score = detections[0,i,j,0]
+                score = score.cpu().numpy()
+                pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
+                boxes.append([pt[0],pt[1],pt[2],pt[3]])
+                scores.append(score)
+                j += 1
+                if j >= detections.size(2):
+                    break
 
     det_conf = np.array(scores)
     boxes = np.array(boxes)
@@ -220,6 +221,8 @@ cfg = widerface_640
 num_classes = len(WIDERFace_CLASSES) + 1 # +1 background
 net = build_ssd('test', cfg['min_dim'], num_classes) # initialize SSD
 net.load_state_dict(torch.load(args.trained_model))
+if torch.cuda.device_count() > 1:  
+    net = nn.DataParallel(net) #enabling data parallelism
 net.cuda()
 net.eval()
 print('Finished loading model!')
