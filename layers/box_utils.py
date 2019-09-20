@@ -397,10 +397,11 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     Return:
         The indices of the kept boxes with respect to num_priors.
     """
-
+#     print('start')
     keep = scores.new(scores.size(0)).zero_().long()
+#     print('KEEP: ', keep)
     if boxes.numel() == 0:
-        return keep
+        return keep, 0
     x1 = boxes[:, 0]
     y1 = boxes[:, 1]
     x2 = boxes[:, 2]
@@ -418,7 +419,11 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
 
     # keep = torch.Tensor()
     count = 0
+#     print('count: ', idx.numel())
+    
     while idx.numel() > 0:
+#         if count == 0:
+#             print('in loop?')
         i = idx[-1]  # index of current largest val
         # keep.append(i)
         keep[count] = i
@@ -450,4 +455,5 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
         IoU = inter/union  # store result in iou
         # keep only elements with an IoU <= overlap
         idx = idx[IoU.le(overlap)]
+#     print('end: ', count)
     return keep, count
