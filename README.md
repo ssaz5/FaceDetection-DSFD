@@ -1,6 +1,13 @@
-## [DSFD: Dual Shot Face Detector](https://arxiv.org/abs/1810.10220)
+
 
 ## Modified to work with ImageNet
+Original Repo: https://github.com/TencentYoutuResearch/FaceDetection-DSFD
+Perform Face Detection on ImageNet 
+
+
+
+
+## [DSFD: Dual Shot Face Detector](https://arxiv.org/abs/1810.10220)
 
 [![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
 
