@@ -248,34 +248,37 @@ def test_oneimage(args):
     
     
 def infer_batch(net , batch , means , thresh , cuda , shrink, img_size=320):
-    with torch.no_grad():
-        #if shrink != 1: # Move shrink outside as 4 datasets
+
+# with torch.no_grad():
+    #if shrink != 1: # Move shrink outside as 4 datasets
 #             img = cv2.resize(img, None, None, fx=shrink, fy=shrink, interpolation=cv2.INTER_LINEAR)
 
-        
-        
-        x = 255*batch.float() - means.float()
-        x = Variable(x)
-#         x = Variable(x.unsqueeze(0)) # not needed with bulk images
-        
-        if cuda:
-            x = x.cuda()
-        #print (shrink , x.shape)
-        y = net(x)      # forward pass
-        detections = y.data
-        
-        
-        # scale each detection back up to the image
+
+
+#         x = 255*batch.float() - means.float()
+#         x = Variable(x)
+# #         x = Variable(x.unsqueeze(0)) # not needed with bulk images
+
+#         if cuda:
+#             x = x.cuda()
+    x = batch
+    #print (shrink , x.shape)
+    y = net(x)      # forward pass
+    detections = y.data
+
+
+
+    # scale each detection back up to the image
 #         scale = torch.Tensor([img_size/shrink, img_size/shrink,
 #                              img_size/shrink, img_size/shrink] )
-        
-        temp = torch.cat([detections[:,0,:,:], detections[:,1,:,:]], dim=1)
-        
-        score = temp[:,:,0]
-        score = score.unsqueeze(-1)
-        pt = temp[:,:,1:]*img_size
+
+    temp = torch.cat([detections[:,0,:,:], detections[:,1,:,:]], dim=1)
+
+    score = temp[:,:,0]
+    score = score.unsqueeze(-1)
+    pt = temp[:,:,1:]*img_size
 #         print(torch.max(pt))
-        det = torch.cat([pt, score], dim=2)
+    det = torch.cat([pt, score], dim=2)
 #         print(det.shape)
         
 
@@ -307,3 +310,64 @@ def flip_batch(dets, img_size=320):
         det_t[..., 4] = det[..., 4]
         dets_t.append(det_t)
     return dets_t
+
+
+
+def infer_data_loader(data_loader, net, means, thresh=0.01, visual_threshold=0.1, cuda=True, shrink=1, st=0.5, bt=2, max_im_shrink=3, small_box_thresh = 15):
+    start = time.time()
+
+    all_dets = []
+
+    with torch.no_grad():
+        for idx, b0 in enumerate(data_loader):
+        #         print(batch.shape, type(batch))
+
+            b0 = 255*b0[0].float() - means.float()
+            b0 = Variable(b0)
+            b0 = b0.cuda()
+    #         break
+    #         if idx == 0:
+    #             data = b0
+    #         else:
+    #             data = torch.cat((data,b0))
+
+            b1 = b0.flip(-1)
+            b2 = torch.nn.functional.interpolate(b0, scale_factor=st, mode='bilinear')
+            b3 = torch.nn.functional.interpolate(b0, scale_factor=bt, mode='bilinear')
+
+
+
+            det_0 = infer_batch(net, b0, means, thresh, cuda, shrink)
+
+
+            det_1 = infer_batch(net, b1, means, thresh, cuda, shrink)
+
+
+            det_s = infer_batch(net, b2, means, thresh, cuda, st)
+
+            det_b1 = infer_batch(net, b3, means, thresh, cuda, bt)
+
+
+
+    #         b1 = torch.nn.functional.interpolate(b0, scale_factor=max_im_shrink, mode='bilinear')
+    #         det_b2 = infer_batch(net, b1, means, thresh, cuda, max_im_shrink)
+    #         dets_b = [np.row_stack(i) for i in zip(det_to_dets(det_b1, thresh), det_to_dets(det_b2, thresh) )]
+
+            dets_b = det_to_dets(det_b1, thresh)
+
+            dets_0 = det_to_dets(det_0, thresh)
+            dets_1 = flip_batch(det_to_dets(det_1, thresh))
+            dets_s = det_to_dets(det_s, thresh)
+
+            index = [np.where(np.maximum(i[..., 2] - i[..., 0] + 1, i[..., 3] - i[..., 1] + 1) > small_box_thresh)[0] for i in dets_s]
+            dets_s = [i[j, :] for i,j in zip(dets_s, index)]
+
+            dets = [np.row_stack((i0, i1, i_s, i_b)) for i0, i1, i_s, i_b in zip(dets_0,dets_1,dets_s,dets_b)]
+
+            all_dets = all_dets + [bbox_vote(det, visual_threshold) for det in dets]
+
+
+
+    end = time.time()
+    print('Total time taken is: ', end-start)
+    return all_dets
